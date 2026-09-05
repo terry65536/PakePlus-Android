@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>摩尔斯信号台控制器 - 蓝牙版</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --orange: #d29922;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .container { max-width: 720px; margin: 0 auto; }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  h1 { font-size: 20px; font-weight: 600; }
+  .conn-badge {
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .conn-badge.ok { color: var(--green); border-color: var(--green); }
+  .conn-badge.ble { color: var(--accent); border-color: var(--accent); }
+
+  .stations {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 520px) { .stations { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    transition: border-color .2s;
+  }
+  .card.active { border-color: var(--green); }
+  .card.disabled { opacity: .65; }
+
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .card-title { font-size: 16px; font-weight: 600; }
+  .tx-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--muted);
+    transition: background .15s;
+  }
+  .tx-dot.on { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+
+  .row { margin-bottom: 12px; }
+  .row label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  select {
+    width: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 15px;
+    appearance: none;
+  }
+  select:disabled { opacity: .5; }
+
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .speed-val { font-size: 13px; color: var(--accent); }
+
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 48px; height: 26px;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer;
+    inset: 0;
+    background: #30363d;
+    border-radius: 26px;
+    transition: .2s;
+  }
+  .slider:before {
+    content: "";
+    position: absolute;
+    height: 20px; width: 20px;
+    left: 3px; top: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: .2s;
+  }
+  input:checked + .slider { background: var(--green); }
+  input:checked + .slider:before { transform: translateX(22px); }
+
+  .status-text {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 6px;
+    min-height: 16px;
+  }
+
+  .screen-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .ble-section {
+    margin-top: 16px;
+    text-align: center;
+  }
+  .btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>摩尔斯信号台控制器</h1>
+    <span class="conn-badge" id="connBadge">等待蓝牙连接</span>
+  </header>
+
+  <div class="stations">
+    <div class="card" id="card1">
+      <div class="card-head">
+        <span class="card-title">信号台 1</span>
+        <span class="tx-dot" id="dot1"></span>
+      </div>
+      <div class="row">
+        <label>台号</label>
+        <select id="call1">
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="MO">MO (起点)</option>
+          <option value="MOE">MOE (终点)</option>
+          <option value="S">S</option>
+          <option value="E">E</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>发射速率 <span class="speed-val" id="speedVal1">150ms</span></label>
+        <input type="range" id="speed1" min="60" max="500" value="150" step="10">
+      </div>
+      <div class="row" style="display:flex;justify-content:space-between;align-items:center;">
+        <label style="margin:0;">开启发射</label>
+        <label class="switch">
+          <input type="checkbox" id="en1">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="status-text" id="status1">off</div>
+    </div>
+
+    <div class="card" id="card2">
+      <div class="card-head">
+        <span class="card-title">信号台 2</span>
+        <span class="tx-dot" id="dot2"></span>
+      </div>
+      <div class="row">
+        <label>台号</label>
+        <select id="call2">
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="MO">MO (起点)</option>
+          <option value="MOE">MOE (终点)</option>
+          <option value="S">S</option>
+          <option value="E">E</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>发射速率 <span class="speed-val" id="speedVal2">150ms</span></label>
+        <input type="range" id="speed2" min="60" max="500" value="150" step="10">
+      </div>
+      <div class="row" style="display:flex;justify-content:space-between;align-items:center;">
+        <label style="margin:0;">开启发射</label>
+        <label class="switch">
+          <input type="checkbox" id="en2">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="status-text" id="status2">off</div>
+    </div>
+  </div>
+
+  <div class="screen-card">
+    <span class="card-title">彩屏显示</span>
+    <label class="switch">
+      <input type="checkbox" id="screen" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="ble-section">
+    <button class="btn" id="bleBtn" onclick="connectBLE()">通过蓝牙连接</button>
+    <div class="hint">需使用 Chrome / Edge 浏览器，并开启蓝牙</div>
+  </div>
+</div>
+
+<script>
+const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
+const CHAR_CONTROL = "19b10001-e8f2-537e-4f6c-d104768a1214";
+const CHAR_STATUS  = "19b10002-e8f2-537e-4f6c-d104768a1214";
+
+let mode = 'ble';
+let bleDevice = null, bleServer = null, ctrlChar = null, statusChar = null;
+
+const badge = document.getElementById('connBadge');
+
+// 通用发送命令
+function sendCommand(obj) {
+  const json = JSON.stringify(obj);
+  if (ctrlChar) {
+    ctrlChar.writeValue(new TextEncoder().encode(json));
+  }
+}
+
+function sendScreen(on) {
+  const json = JSON.stringify({screen: on});
+  if (ctrlChar) {
+    ctrlChar.writeValue(new TextEncoder().encode(json));
+  }
+}
+
+// 更新界面
+function updateUI(data) {
+  if (!data || !data.stations) return;
+  data.stations.forEach(s => {
+    const n = s.id;
+    document.getElementById('en'+n).checked = s.enabled;
+    document.getElementById('call'+n).value = s.call;
+    document.getElementById('speed'+n).value = s.speed;
+    document.getElementById('speedVal'+n).textContent = s.speed + 'ms';
+    document.getElementById('status'+n).textContent = s.status;
+    document.getElementById('dot'+n).classList.toggle('on', s.transmitting);
+    const card = document.getElementById('card'+n);
+    card.classList.toggle('active', s.enabled);
+    card.classList.toggle('disabled', !s.enabled);
+  });
+  document.getElementById('screen').checked = data.screen;
+}
+
+// 绑定控件事件
+function bind(id, evt, fn) {
+  document.getElementById(id).addEventListener(evt, fn);
+}
+bind('en1','change', e => sendCommand({station:1, enabled:e.target.checked}));
+bind('en2','change', e => sendCommand({station:2, enabled:e.target.checked}));
+bind('call1','change', e => sendCommand({station:1, call:e.target.value}));
+bind('call2','change', e => sendCommand({station:2, call:e.target.value}));
+bind('speed1','input', e => {
+  document.getElementById('speedVal1').textContent = e.target.value + 'ms';
+});
+bind('speed1','change', e => sendCommand({station:1, speed:parseInt(e.target.value)}));
+bind('speed2','input', e => {
+  document.getElementById('speedVal2').textContent = e.target.value + 'ms';
+});
+bind('speed2','change', e => sendCommand({station:2, speed:parseInt(e.target.value)}));
+bind('screen','change', e => sendScreen(e.target.checked));
+
+// BLE 连接
+async function connectBLE() {
+  try {
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'MorseController' }],
+      optionalServices: [SERVICE_UUID]
+    });
+    bleDevice.addEventListener('gattserverdisconnected', () => {
+      badge.textContent = '蓝牙已断开';
+      badge.className = 'conn-badge';
+    });
+    bleServer = await bleDevice.gatt.connect();
+    const service = await bleServer.getPrimaryService(SERVICE_UUID);
+    ctrlChar = await service.getCharacteristic(CHAR_CONTROL);
+    statusChar = await service.getCharacteristic(CHAR_STATUS);
+    statusChar.addEventListener('characteristicvaluechanged', e => {
+      const text = new TextDecoder().decode(e.target.value);
+      try { updateUI(JSON.parse(text)); } catch(_){}
+    });
+    await statusChar.startNotifications();
+    badge.textContent = '蓝牙已连接';
+    badge.className = 'conn-badge ble';
+    // 拉取一次当前状态
+    const v = await statusChar.readValue();
+    try { updateUI(JSON.parse(new TextDecoder().decode(v))); } catch(_){}
+  } catch (err) {
+    alert('蓝牙连接失败: ' + err.message);
+  }
+}
+</script>
+</body>
+</html>
